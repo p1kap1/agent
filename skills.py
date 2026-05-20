@@ -354,16 +354,20 @@ def generate_project_summary(date: str = None) -> str:
         date = _dt.date.today().isoformat()
 
     conversation = storage.load_conversation(date)
-    if not conversation:
-        return f"{date} 没有对话记录，无法生成项目总结。"
+    devlog = _load_devlog(date)
+
+    if not conversation and not devlog:
+        return f"{date} 没有对话记录和开发日志，无法生成项目总结。"
 
     lines = []
     for entry in conversation:
         role = "用户" if entry["role"] == "user" else "助手"
         lines.append(f"[{entry['time'][:19]}] {role}: {entry['content']}")
+    if devlog:
+        lines.append(f"\n[开发日志] {devlog}")
     conv_text = "\n".join(lines)
 
-    prompt = f"""以下是一天的项目开发对话记录。请从中提炼生成一份项目开发简报：
+    prompt = f"""以下是一天的项目开发对话记录。请从中提炼生成一份项目开发简报，格式如下：
 
 # 项目开发简报 — {date}
 
@@ -399,6 +403,55 @@ def generate_project_summary(date: str = None) -> str:
 
     filepath = storage.save_report(f"project_{date}", summary)
     return f"项目总结已保存到 `{filepath}`\n\n{summary}"
+
+
+def _load_devlog(date_str: str) -> str:
+    """读取开发日志文件"""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devlog.md")
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def import_devlog() -> str:
+    """将 devlog.md 导入到今日对话记录中"""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devlog.md")
+    if not os.path.exists(path):
+        return "未找到 devlog.md，请在项目根目录创建该文件并写入开发日志。"
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    if not content.strip():
+        return "devlog.md 为空，请先写入内容。"
+    storage.append_conversation("user", f"[开发日志]\n{content}")
+    return f"✅ 已导入开发日志（{len(content)} 字），说「项目总结」即可生成简报。"
+
+
+# ---- 上传文件管理 ----
+
+def list_uploaded_files() -> str:
+    """列出所有上传的文件"""
+    files = storage.list_uploads()
+    if not files:
+        return "暂无上传的文件。将 md/txt 文件放入 data/uploads/ 目录即可。"
+    lines = [f"共 {len(files)} 个上传文件：", ""]
+    for f in files:
+        import os
+        name = os.path.basename(f)
+        size = os.path.getsize(f)
+        lines.append(f"- `{name}` ({size} bytes)")
+    return "\n".join(lines)
+
+
+def import_uploaded_file(filename: str) -> str:
+    """将指定的上传文件导入对话记录"""
+    content = storage.read_upload(filename)
+    if not content:
+        return f"未找到文件 `{filename}`。说「查看上传文件」可列出所有可用文件。"
+    storage.append_conversation("user", f"[上传文件: {filename}]\n{content}")
+    return f"✅ 已导入 `{filename}`（{len(content)} 字），说「项目总结」即可生成简报。"
 
 
 def add_job_application(company: str, position: str,
@@ -565,15 +618,42 @@ FUNCTION_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "generate_project_summary",
-            "description": "根据今天的对话记录生成项目开发简报（新增功能/修复问题/技术难点/解决方案），输出Markdown文件。用户说「项目总结」「开发简报」「今天做了什么」时调用。",
+            "description": "根据今天的对话记录（含开发日志）生成项目开发简报（新增功能/修复问题/技术难点/解决方案），输出Markdown文件。用户说「项目总结」「开发简报」「今天做了什么」时调用。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "date": {
-                        "type": "string",
-                        "description": "日期 YYYY-MM-DD，默认今天",
-                    },
+                    "date": {"type": "string", "description": "日期 YYYY-MM-DD，默认今天"},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_devlog",
+            "description": "导入项目根目录的 devlog.md 开发日志到对话记录中。用户说「导入开发日志」「导入devlog」时调用。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_uploaded_files",
+            "description": "列出 data/uploads/ 目录下所有上传的对话文件。用户说「查看上传文件」「有哪些上传的」时调用。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_uploaded_file",
+            "description": "将指定上传文件的内容导入今日对话记录。用户说「导入XX文件」「加载聊天记录」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "要导入的文件名，如 chat_with_gpt.md"},
+                },
+                "required": ["filename"],
             },
         },
     },
@@ -640,6 +720,9 @@ SKILL_MAP = {
     "git_push_project": git_push_project,
     "git_display_status": git_display_status,
     "generate_project_summary": generate_project_summary,
+    "import_devlog": import_devlog,
+    "list_uploaded_files": list_uploaded_files,
+    "import_uploaded_file": import_uploaded_file,
     "add_job_application": add_job_application,
     "list_job_applications": list_job_applications,
     "update_job_status": update_job_status,

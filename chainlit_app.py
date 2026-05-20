@@ -172,13 +172,27 @@ async def start():
 @cl.on_message
 async def on_message(message: cl.Message):
     agent: WorkAgent = cl.user_session.get("agent")
+
+    # 处理文件上传：保存到 data/uploads/
+    if message.elements:
+        for element in message.elements:
+            if element.name and element.content:
+                import os
+                upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "uploads")
+                os.makedirs(upload_dir, exist_ok=True)
+                filepath = os.path.join(upload_dir, element.name)
+                content = element.content.decode("utf-8") if isinstance(element.content, bytes) else str(element.content)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(content)
+                await cl.Message(content=f"✅ 已保存 `{element.name}`，说「导入 {element.name}」即可加载内容。").send()
+                return
+
     try:
         reply = agent.chat(message.content)
     except Exception as e:
         import traceback
         reply = f"❌ 内部错误: {e}\n```\n{traceback.format_exc()}\n```"
     
-    # 如果命中了技能调用，读取调试日志展示出来
     import os
     debug_log = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "debug.log")
     debug_info = ""

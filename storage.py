@@ -7,6 +7,7 @@ from config import DATA_DIR
 CONV_DIR = os.path.join(DATA_DIR, "conversations")
 REPORT_DIR = os.path.join(DATA_DIR, "reports")
 JOB_FILE = os.path.join(DATA_DIR, "applications.json")
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 
 
 def _ensure_dirs():
@@ -147,3 +148,33 @@ def delete_application(app_id: int) -> bool:
             _save_jobs(jobs)
             return True
     return False
+
+
+# ---- 上传文件管理 ----
+
+def list_uploads() -> list[str]:
+    """列出所有上传的文件"""
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    files = sorted(
+        [f for f in os.listdir(UPLOAD_DIR) if f.endswith(".md") or f.endswith(".txt")],
+        reverse=True,
+    )
+    return [os.path.join(UPLOAD_DIR, f) for f in files]
+
+
+def read_upload(filename: str) -> str:
+    """读取某个上传文件的内容"""
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(filepath):
+        return ""
+    with open(filepath, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def save_upload(filename: str, content: str):
+    """保存上传文件"""
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(content)
+    return filepath
