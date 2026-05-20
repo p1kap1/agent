@@ -49,9 +49,10 @@ def generate_daily_report(date: str = None) -> str:
 
     conversation = storage.load_conversation(date_str)
     applications = storage.list_applications(date_str=date_str)
+    devlog_content = _load_devlog(date_str)
 
-    if not conversation and not applications:
-        return f"{date_str} 没有对话记录和投递记录，无法生成日报。"
+    if not conversation and not applications and not devlog_content:
+        return f"{date_str} 没有对话记录、投递记录和开发日志，无法生成日报。"
 
     # ---- Part 1: 投递记录 ----
     job_text = ""
@@ -72,24 +73,35 @@ def generate_daily_report(date: str = None) -> str:
     else:
         job_text = "## 📮 今日投递\n\n暂无投递记录。"
 
-    # ---- Part 2: 推荐了解知识 ----
-    rec_text = ""
-    if conversation:
+    # ---- Part 2 & 3: 项目总结 & 开发技巧（来自对话+devlog）----
+    project_text = ""
+    dev_tips_text = ""
+    if conversation or devlog_content:
         lines = []
         for entry in conversation:
             role = "用户" if entry["role"] == "user" else "助手"
             lines.append(f"[{entry['time'][:19]}] {role}: {entry['content']}")
+        if devlog_content:
+            lines.append(f"\n[开发日志]\n{devlog_content}")
+        # 读取上传文件
+        uploaded_files = storage.list_uploads()
+        for uf in uploaded_files:
+            import os as _os
+            name = _os.path.basename(uf)
+            content = storage.read_upload(name)
+            if content:
+                lines.append(f"\n[上传文件: {name}]\n{content[:2000]}")
         conv_text = "\n".join(lines)
 
-        prompt = f"""以下是一天的对话记录。请根据对话中涉及的技术话题、遇到的问题、讨论的方向，推荐 2-4 个值得深入了解的知识点或工具。
+        # 项目总结
+        prompt = f"""以下是一天的对话记录和开发日志。请从中提取「项目开发」相关的内容，生成一段项目总结。
 
 要求：
-- 每条推荐包含：知识名称、一句话简介、推荐理由（与对话的关联）
-- 优先推荐对话中明确提到但未深入的内容
-- 用 Markdown 格式，简洁
-- 不要编造对话中没有的内容
+- 只总结与代码开发、项目构建、功能实现、bug 修复相关的内容
+- 用 Markdown，简洁，每条 1 句话
+- 如果没有开发相关内容，写"今日无开发活动"
+- 不要编造
 
-对话记录：
 ---
 {conv_text}
 ---"""
@@ -98,7 +110,69 @@ def generate_daily_report(date: str = None) -> str:
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
         )
-        rec_text = response.choices[0].message.content or ""
+        project_text = response.choices[0].message.content or ""
+
+        # 开发技巧
+        prompt2 = f"""以下是一天的对话记录和开发日志。请从中提炼 1-3 条开发技巧或最佳实践。
+
+要求：
+- 每条包含：技巧名称、一句话说明
+- 优先提取开发中实际踩过的坑、用到的方案
+- 用 Markdown，简洁
+- 如果没有开发相关技巧，写"今日无特别技巧"
+- 不要编造
+
+---
+{conv_text}
+---"""
+
+        response2 = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt2}],
+        )
+        dev_tips_text = response2.choices[0].message.content or ""
+    else:
+        project_text = "今日无开发活动。"
+        dev_tips_text = "今日无特别技巧。"
+
+    # ---- Part 4: 推荐了解知识（综合对话+devlog+上传文件）----
+    rec_text = ""
+    if conversation or devlog_content:
+        lines = []
+        for entry in conversation:
+            role = "用户" if entry["role"] == "user" else "助手"
+            lines.append(f"[{entry['time'][:19]}] {role}: {entry['content']}")
+        if devlog_content:
+            lines.append(f"\n[开发日志]\n{devlog_content}")
+
+        # 读取上传文件
+        uploaded_files = storage.list_uploads()
+        for uf in uploaded_files:
+            import os as _os
+            name = _os.path.basename(uf)
+            content = storage.read_upload(name)
+            if content:
+                lines.append(f"\n[上传文件: {name}]\n{content[:2000]}")
+        conv_text2 = "\n".join(lines)
+
+        prompt3 = f"""以下是一天的对话记录、开发日志和上传文件。请根据其中涉及的技术话题、遇到的问题、讨论的方向，推荐 2-4 个值得深入了解的知识点或工具。
+
+要求：
+- 每条推荐包含：知识名称、一句话简介、推荐理由（与对话的关联）
+- 综合对话内容、项目总结、开发日志和上传文件来推荐
+- 优先推荐对话中明确提到但未深入的内容
+- 用 Markdown 格式，简洁
+- 不要编造
+
+---
+{conv_text2}
+---"""
+
+        response3 = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt3}],
+        )
+        rec_text = response3.choices[0].message.content or ""
     else:
         rec_text = "今日无对话记录，无法生成知识推荐。"
 
@@ -110,8 +184,11 @@ def generate_daily_report(date: str = None) -> str:
         f"---\n\n"
         f"{job_text}\n\n"
         f"---\n\n"
-        f"## 📚 推荐了解知识\n\n"
-        f"{rec_text}\n\n"
+        f"## 🛠 项目总结\n\n{project_text}\n\n"
+        f"---\n\n"
+        f"## 💡 开发技巧\n\n{dev_tips_text}\n\n"
+        f"---\n\n"
+        f"## 📚 推荐了解知识\n\n{rec_text}\n\n"
         f"---\n"
         f"*由 WorkMate Agent 自动生成*"
     )
