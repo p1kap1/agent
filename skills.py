@@ -53,7 +53,7 @@ def generate_daily_report(date: str = None) -> str:
     if not conversation and not applications:
         return f"{date_str} 没有对话记录和投递记录，无法生成日报。"
 
-    # 构建投递记录文本
+    # ---- Part 1: 投递记录 ----
     job_text = ""
     if applications:
         lines = ["## 📮 今日投递\n"]
@@ -69,9 +69,11 @@ def generate_daily_report(date: str = None) -> str:
                     line += f"（{j['notes']}）"
                 lines.append(line)
         job_text = "\n".join(lines)
+    else:
+        job_text = "## 📮 今日投递\n\n暂无投递记录。"
 
-    # 让 AI 总结对话（结合投递信息）
-    conv_part = ""
+    # ---- Part 2: 推荐了解知识 ----
+    rec_text = ""
     if conversation:
         lines = []
         for entry in conversation:
@@ -79,51 +81,39 @@ def generate_daily_report(date: str = None) -> str:
             lines.append(f"[{entry['time'][:19]}] {role}: {entry['content']}")
         conv_text = "\n".join(lines)
 
-        ctx = "以下是一天的对话记录"
-        if applications:
-            ctx += "以及当天的投简历记录（已附在对话后）"
-        prompt = f"""{ctx}。请根据这些记录生成日报。
+        prompt = f"""以下是一天的对话记录。请根据对话中涉及的技术话题、遇到的问题、讨论的方向，推荐 2-4 个值得深入了解的知识点或工具。
 
 要求：
-- 用 Markdown 格式
-- 如果记录中体现了做过的具体事情、学到的新知识、解决的问题，请分类列出
-- 投递记录部分单独列出：公司、岗位、状态
-- 如果某类内容缺失，说明"无记录"
-- 简洁，不要编造记录中没有的内容
+- 每条推荐包含：知识名称、一句话简介、推荐理由（与对话的关联）
+- 优先推荐对话中明确提到但未深入的内容
+- 用 Markdown 格式，简洁
+- 不要编造对话中没有的内容
 
 对话记录：
 ---
 {conv_text}
----
+---"""
 
-{job_text}"""
-
-        summary = _ask_ai_to_summarize(
-            conversation,
-            "生成一份日报，包含以下部分：\n"
-            "1. **今日完成** — 做了哪些具体事情\n"
-            "2. **新知识/技能** — 学到了什么\n"
-            "3. **遇到的问题** — 遇到了什么问题、是否解决\n"
-            + ("4. **投递记录** — 今天投了哪些公司、状态如何\n" if applications else ""),
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt}],
         )
-        if not summary:
-            return "AI 总结失败，请稍后重试。"
+        rec_text = response.choices[0].message.content or ""
     else:
-        summary = "（今日无工作学习对话记录）"
+        rec_text = "今日无对话记录，无法生成知识推荐。"
 
-    # 拼完整报告
+    # ---- 拼报告 ----
     day_name = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()]
     full_report = (
         f"# 工作日报\n\n"
         f"**日期**: {date_str} {day_name}\n\n"
         f"---\n\n"
-        f"{summary}\n\n"
-    )
-    if applications:
-        full_report += job_text + "\n\n"
-    full_report += (
+        f"{job_text}\n\n"
+        f"---\n\n"
+        f"## 📚 推荐了解知识\n\n"
+        f"{rec_text}\n\n"
         f"---\n"
-        f"*由 Work Agent 自动生成*"
+        f"*由 WorkMate Agent 自动生成*"
     )
 
     filepath = storage.save_report(date_str, full_report)
