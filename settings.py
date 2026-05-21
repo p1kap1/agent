@@ -124,29 +124,60 @@ def show_settings() -> str:
 def setup_wizard() -> str:
     """新用户引导设置"""
     env = _load_env()
+    users = _load_users()
+    active = users.get("active_user", "default")
+    user_cfg = users.get("users", {}).get(active, {})
+
+    key_ok = bool(env.get("OPENAI_API_KEY"))
+    cookie_ok = bool(user_cfg.get("boss_cookie"))
+    git_ok = bool(_check_git_remote())
+
     lines = [
-        "## 👋 欢迎使用 FlowMate！初次设置请完成以下步骤：",
+        "## 👋 FlowMate 配置中心",
         "",
-        "### 第一步：选择 AI 模型",
-        "说「**选择模型**」查看可选模型，或直接说：",
-        "- `用DeepSeek` — 国产模型，性价比高（默认）",
-        "- `用OpenAI` — GPT-4o-mini",
-        "- `用智谱` — 智谱 GLM-4-Flash",
-        "- `用自定义模型` — 任何兼容 OpenAI 接口的服务",
+        f"当前用户：**{active}**",
         "",
-        "### 第二步：设置 API Key",
-        "`设置Key为sk-你的key`",
-        "",
-        "### 第三步（可选）：Boss直聘求职追踪",
-        "`更新Boss Cookie 你的cookie字符串`",
-        "",
-        "### 第四步（可选）：GitHub 代码推送",
-        "`设置GitHub Token为ghp_你的token`",
-        "",
-        "### 第五步：开始使用",
-        "说「**同步投递**」拉取求职数据，说「**生成日报**」总结今日。",
+        "| 配置项 | 状态 | 操作 |",
+        "|---|---|---|",
     ]
+
+    provider = env.get("OPENAI_PROVIDER", "deepseek")
+    model = env.get("OPENAI_MODEL", DEFAULT_MODEL)
+    status = "✅" if key_ok else "❌"
+    lines.append(f"| 🧠 模型 | {status} {provider}/{model} | `用DeepSeek` `用OpenAI` `用智谱` |")
+    lines.append(f"| 🔑 API Key | {'✅ 已设置' if key_ok else '❌ 未设置'} | `设置Key为sk-xxx` |")
+    lines.append(f"| 💼 Boss直聘 | {'✅ 已配置' if cookie_ok else '❌ 未配置'} | `更新Boss Cookie` |")
+    lines.append(f"| 📦 GitHub | {'✅ 已配置' if git_ok else '❌ 未配置'} | `设置GitHub Token为ghp_xxx` |")
+
+    lines.append("")
+    lines.append("### 支持的 AI 模型")
+    for key, preset in MODEL_PRESETS.items():
+        if key != "custom":
+            lines.append(f"- **{preset['name']}** — `{preset['model']}` → 说「用{key}」")
+    lines.append("- **自定义** — 任何兼容 OpenAI 接口的服务 → 说「用自定义模型」")
+
+    all_users = list(users.get("users", {}).keys())
+    if len(all_users) > 1:
+        lines.append(f"\n其他用户: {', '.join(u for u in all_users if u != active)}")
+        lines.append("说「切换用户 名字」切换")
+
+    missing = []
+    if not key_ok:
+        missing.append("`设置Key为sk-xxx`")
+    if not cookie_ok:
+        missing.append("`更新Boss Cookie`")
+    if not git_ok:
+        missing.append("`设置GitHub Token为ghp_xxx`")
+    if missing:
+        lines.append(f"\n⚠ 待完成：{' · '.join(missing)}")
+
     return "\n".join(lines)
+
+
+def _check_git_remote() -> bool:
+    r = subprocess.run(["git", "remote", "get-url", "origin"],
+                       cwd=PROJECT_DIR, capture_output=True, text=True)
+    return r.returncode == 0 and bool(r.stdout.strip())
 
 
 def select_model(provider: str) -> str:
