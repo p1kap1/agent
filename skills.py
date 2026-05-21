@@ -254,6 +254,66 @@ def summarize_period(start_date: str, end_date: str) -> str:
 
 # ---- 投简历相关技能 ----
 
+# ---- 配置管理 ----
+
+def _import_settings():
+    import os, sys, importlib.util
+    try:
+        import settings
+        return settings, None
+    except ImportError:
+        sp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.py")
+        spec = importlib.util.spec_from_file_location("settings", sp)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules["settings"] = mod
+            spec.loader.exec_module(mod)
+            return mod, None
+        return None, "Settings 模块未找到"
+
+
+def show_current_settings() -> str:
+    """查看当前配置"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.show_settings()
+
+
+def set_deepseek_api_key(key: str) -> str:
+    """设置 DeepSeek API Key"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.set_deepseek_key(key)
+
+
+def set_boss_user_cookie(cookie: str) -> str:
+    """设置 Boss直聘 Cookie"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.set_boss_cookie(cookie)
+
+
+def set_github_access_token(token: str) -> str:
+    """设置 GitHub Token"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.set_github_token(token)
+
+
+def switch_active_user(username: str) -> str:
+    """切换或创建用户"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.switch_user(username)
+
+
+# ---- 投简历相关技能 ----
+
 def _import_boss():
     import os, sys, importlib.util
     try:
@@ -599,6 +659,62 @@ FUNCTION_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "show_current_settings",
+            "description": "查看FlowMate当前配置（API Key、Boss Cookie等，敏感信息已脱敏）",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_deepseek_api_key",
+            "description": "设置DeepSeek API Key。用户说「设置DeepSeek Key」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"key": {"type": "string", "description": "API Key"}},
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_boss_user_cookie",
+            "description": "设置当前用户的Boss直聘Cookie。用户说「更新Boss Cookie」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"cookie": {"type": "string", "description": "完整Cookie字符串"}},
+                "required": ["cookie"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_github_access_token",
+            "description": "设置GitHub Token并自动配置git remote。用户说「设置GitHub Token」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"token": {"type": "string", "description": "GitHub Token（ghp_开头）"}},
+                "required": ["token"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_active_user",
+            "description": "切换或创建用户配置。用户说「切换用户」「换账号」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"username": {"type": "string", "description": "用户名"}},
+                "required": ["username"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_daily_report",
             "description": "生成某一天的日报：总结做了什么事、学了什么知识、遇到什么问题。日期不指定则生成今天的日报。",
             "parameters": {
@@ -801,6 +917,11 @@ FUNCTION_DEFINITIONS = [
 ]
 
 SKILL_MAP = {
+    "show_current_settings": show_current_settings,
+    "set_deepseek_api_key": set_deepseek_api_key,
+    "set_boss_user_cookie": set_boss_user_cookie,
+    "set_github_access_token": set_github_access_token,
+    "switch_active_user": switch_active_user,
     "generate_daily_report": generate_daily_report,
     "search_history": search_history,
     "summarize_period": summarize_period,
