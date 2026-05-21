@@ -22,12 +22,15 @@ BOSS_INTERACTION_API = "https://www.zhipin.com/wapi/zprelation/interaction/geekG
 BOSS_DELIVERY_API = "https://www.zhipin.com/wapi/zprelation/resume/geekDeliverList"
 # 面试 API  
 BOSS_INTERVIEW_API = "https://www.zhipin.com/wapi/zpinterview/geek/interview/list"
+# 每日推荐 API（优先用精准推荐，失败回退到通用推荐）
+BOSS_RECOMMEND_DAILY = "https://www.zhipin.com/wapi/zpgeek/recommend/job/list.json"
 
 TAB_PARAMS = {
     "沟通过": {"api": "interaction", "tag": 5, "isActive": "true"},
     "已投递": {"api": "delivery"},
     "面试":   {"api": "interview"},
     "感兴趣": {"api": "interaction", "tag": 4, "isActive": "true"},
+    "每日推荐": {"api": "daily_recommend"},
 }
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -226,6 +229,9 @@ def _fetch_tab(tab: str) -> list[dict]:
         elif api_type == "interview":
             url = BOSS_INTERVIEW_API
             params = {"page": page, "pageSize": page_size}
+        elif api_type == "daily_recommend":
+            url = BOSS_RECOMMEND_DAILY
+            params = {"tab": 0, "page": page, "pageSize": page_size}
         else:
             url = BOSS_INTERACTION_API
             params = {"tag": cfg.get("tag"), "page": page, "pageSize": page_size}
@@ -244,10 +250,14 @@ def _fetch_tab(tab: str) -> list[dict]:
 
         all_items.extend(items)
 
-        if not has_more:
+        # 每日推荐 hasMore 不可靠，按页数上限翻页；其他按 hasMore
+        if api_type == "daily_recommend":
+            if page >= 3:
+                break
+        elif not has_more:
             break
         page += 1
-        time.sleep(0.3)
+        time.sleep(1.0 if api_type == "daily_recommend" else 0.3)
 
     return _extract_jobs_from_items(all_items, tab, api_type)
 
@@ -270,6 +280,11 @@ def fetch_boss_interviews() -> list[dict]:
 def fetch_boss_interested() -> list[dict]:
     """获取「感兴趣」列表"""
     return _fetch_tab("感兴趣")
+
+
+def fetch_daily_recommend() -> list[dict]:
+    """获取「每日推荐」列表"""
+    return _fetch_tab("每日推荐")
 
 
 def _save_jobs_to_storage(jobs: list[dict]) -> int:

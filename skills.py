@@ -352,6 +352,25 @@ def fetch_boss_interested() -> str:
     )
 
 
+def fetch_daily_recommend() -> str:
+    """获取 Boss直聘「每日推荐」列表"""
+    boss, err = _import_boss()
+    if not boss:
+        return err
+    try:
+        jobs = boss.fetch_daily_recommend()
+        n = boss._save_jobs_to_storage(jobs)
+    except PermissionError as e:
+        return f"⚠ Cookie 未配置或已过期：{e}"
+    except Exception as e:
+        return f"⚠ 获取每日推荐失败：{e}"
+    return (
+        f"✅ 每日推荐：获取成功，新增 {n} 条记录"
+        if n > 0 else
+        f"✅ 每日推荐：获取成功，数据已是最新（无新增）"
+    )
+
+
 def boss_job_summary() -> str:
     """汇总四个模块数据，输出统计报告"""
     boss, err = _import_boss()
@@ -651,8 +670,16 @@ FUNCTION_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "list_exported_files",
-            "description": "列出所有历史导出的Boss直聘Excel文件。用户说「之前导出的文件」「历史记录」时调用。",
+            "name": "fetch_boss_interested",
+            "description": "从Boss直聘获取「感兴趣」列表。用户说「同步感兴趣」时调用。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_daily_recommend",
+            "description": "从Boss直聘获取「每日推荐」职位列表（需携带有效会话Cookie）。用户说「同步每日推荐」「每日推荐」时调用。",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -781,6 +808,7 @@ SKILL_MAP = {
     "fetch_boss_applied": fetch_boss_applied,
     "fetch_boss_interviews": fetch_boss_interviews,
     "fetch_boss_interested": fetch_boss_interested,
+    "fetch_daily_recommend": fetch_daily_recommend,
     "boss_job_summary": boss_job_summary,
     "export_boss_excel": export_boss_excel,
     "list_exported_files": list_exported_files,

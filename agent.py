@@ -33,6 +33,7 @@ SYSTEM_PROMPT = f"""你是 FlowMate，一个工作日志助手。今天的日期
 
 触发规则：
 - 用户说"同步"、"刷新投递"、"更新" → 依次调用 fetch_boss_channels + fetch_boss_applied + fetch_boss_interviews + fetch_boss_interested
+- 用户说"每日推荐"、"同步推荐" → fetch_daily_recommend
 - 用户说"投递汇总"、"求职进度"、"统计" → boss_job_summary
 - 用户说"看看投了多少"、"投递情况" → list_job_applications
 - 用户说"投了XX"、"沟通了XX" → add_job_application（公司、岗位从用户消息中提取）
