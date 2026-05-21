@@ -280,12 +280,44 @@ def show_current_settings() -> str:
     return mod.show_settings()
 
 
-def set_deepseek_api_key(key: str) -> str:
-    """设置 DeepSeek API Key"""
+def run_setup_wizard() -> str:
+    """新用户引导"""
     mod, err = _import_settings()
     if not mod:
         return err
-    return mod.set_deepseek_key(key)
+    return mod.setup_wizard()
+
+
+def select_ai_model(provider: str) -> str:
+    """选择 AI 模型（deepseek/openai/zhipu/moonshot/custom）"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.select_model(provider)
+
+
+def set_user_api_key(key: str) -> str:
+    """设置 API Key"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.set_api_key(key)
+
+
+def set_custom_model(name: str) -> str:
+    """设置自定义模型名"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.set_model_name(name)
+
+
+def set_custom_api_url(url: str) -> str:
+    """设置自定义 API 地址"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    return mod.set_api_base_url(url)
 
 
 def set_boss_user_cookie(cookie: str) -> str:
@@ -659,16 +691,36 @@ FUNCTION_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "show_current_settings",
-            "description": "查看FlowMate当前配置（API Key、Boss Cookie等，敏感信息已脱敏）",
+            "name": "run_setup_wizard",
+            "description": "新用户引导设置向导。用户说「开始设置」「不知道怎么用」「引导」时调用。",
             "parameters": {"type": "object", "properties": {}},
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "set_deepseek_api_key",
-            "description": "设置DeepSeek API Key。用户说「设置DeepSeek Key」时调用。",
+            "name": "show_current_settings",
+            "description": "查看当前配置。用户说「配置」「设置」「信息」时调用。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_ai_model",
+            "description": "选择AI模型厂商。用户说「选择模型」「用DeepSeek」「用OpenAI」「用智谱」「用自定义模型」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"provider": {"type": "string", "description": "deepseek/openai/zhipu/moonshot/custom"}},
+                "required": ["provider"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_user_api_key",
+            "description": "设置API Key。用户说「设置Key为xxx」时调用。",
             "parameters": {
                 "type": "object",
                 "properties": {"key": {"type": "string", "description": "API Key"}},
@@ -679,8 +731,32 @@ FUNCTION_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "set_custom_model",
+            "description": "设置自定义模型名称。用户选自定义模型后用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "模型名称"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_custom_api_url",
+            "description": "设置自定义API地址。用户选自定义模型后用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "API Base URL"}},
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "set_boss_user_cookie",
-            "description": "设置当前用户的Boss直聘Cookie。用户说「更新Boss Cookie」时调用。",
+            "description": "设置Boss直聘Cookie。用户说「更新Boss Cookie」时调用。",
             "parameters": {
                 "type": "object",
                 "properties": {"cookie": {"type": "string", "description": "完整Cookie字符串"}},
@@ -692,10 +768,10 @@ FUNCTION_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_github_access_token",
-            "description": "设置GitHub Token并自动配置git remote。用户说「设置GitHub Token」时调用。",
+            "description": "设置GitHub Token并配置git remote。用户说「设置GitHub Token」时调用。",
             "parameters": {
                 "type": "object",
-                "properties": {"token": {"type": "string", "description": "GitHub Token（ghp_开头）"}},
+                "properties": {"token": {"type": "string", "description": "GitHub Token"}},
                 "required": ["token"],
             },
         },
@@ -704,7 +780,7 @@ FUNCTION_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "switch_active_user",
-            "description": "切换或创建用户配置。用户说「切换用户」「换账号」时调用。",
+            "description": "切换或创建用户。用户说「切换用户」「换账号」时调用。",
             "parameters": {
                 "type": "object",
                 "properties": {"username": {"type": "string", "description": "用户名"}},
@@ -917,8 +993,12 @@ FUNCTION_DEFINITIONS = [
 ]
 
 SKILL_MAP = {
+    "run_setup_wizard": run_setup_wizard,
     "show_current_settings": show_current_settings,
-    "set_deepseek_api_key": set_deepseek_api_key,
+    "select_ai_model": select_ai_model,
+    "set_user_api_key": set_user_api_key,
+    "set_custom_model": set_custom_model,
+    "set_custom_api_url": set_custom_api_url,
     "set_boss_user_cookie": set_boss_user_cookie,
     "set_github_access_token": set_github_access_token,
     "switch_active_user": switch_active_user,
