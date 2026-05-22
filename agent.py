@@ -35,9 +35,12 @@ SYSTEM_PROMPT = f"""你是 FlowMate，一个工作日志助手。今天的日期
 - 用户说"同步"、"刷新投递"、"更新"（没指定平台）→ sync_all_applications（同步全部平台投递）
 - 用户说"同步Boss"、"同步Boss直聘" → sync_boss_applications
 - 用户说"同步智联"、"同步智联招聘" → sync_zhaopin_applications
+- 用户说"同步猎聘" → sync_liepin_applications
 - 用户说"每日推荐"、"同步推荐"（没指定平台）→ sync_all_recommends
 - 用户说"Boss推荐"、"Boss每日推荐" → sync_boss_recommends
 - 用户说"智联推荐" → sync_zhaopin_recommends
+- 用户说"猎聘推荐" → sync_liepin_recommends
+- 用户说"导出猎聘"、"猎聘Excel" → export_liepin_to_excel
 - 用户说"投递汇总"、"求职进度"、"统计" → boss_job_summary
 - 用户说"看看投了多少"、"投递情况" → list_job_applications
 - 用户说"每日推荐表"、"展示每日推荐"、"推荐岗位" → show_daily_recommend_table

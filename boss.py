@@ -605,14 +605,18 @@ def export_excel(status_filter: str = None, date_filter: str = None) -> str:
 
 
 def export_all_reports(date_filter: str = None) -> str:
-    """导出全部数据（Boss投递 + Boss推荐 + 智联投递 + 智联推荐）"""
+    """导出全部数据（Boss + 智联 + 猎聘）"""
     results = []
     results.append(export_excel(date_filter=date_filter))
     results.append(export_daily_recommend_excel(date_filter=date_filter))
-    # 智联
     try:
         import zhaopin
         results.append(zhaopin.export_zhaopin_excel(date_filter=date_filter))
+    except Exception:
+        pass
+    try:
+        import liepin
+        results.append(liepin.export_liepin_excel(date_filter=date_filter))
     except Exception:
         pass
     return "\n".join(results)

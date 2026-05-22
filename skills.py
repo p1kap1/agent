@@ -1178,17 +1178,23 @@ FUNCTION_DEFINITIONS = [
 # ---- 统一同步（跨平台）----
 
 def sync_all_applications() -> str:
-    """同步全部平台的投递数据（Boss + 智联，不含推荐）"""
-    boss_line = sync_boss_applications()
-    zhaopin_line = sync_zhaopin_applications()
-    return f"{boss_line}\n{zhaopin_line}"
+    """同步全部平台的投递数据（Boss + 智联 + 猎聘，不含推荐）"""
+    parts = [sync_boss_applications(), sync_zhaopin_applications()]
+    try:
+        parts.append(sync_liepin_applications())
+    except Exception as e:
+        parts.append(f"猎聘: ⚠ {e}")
+    return "\n".join(parts)
 
 
 def sync_all_recommends() -> str:
-    """同步全部平台的每日推荐（Boss + 智联）"""
-    boss_line = sync_boss_recommends()
-    zhaopin_line = sync_zhaopin_recommends()
-    return f"{boss_line}\n{zhaopin_line}"
+    """同步全部平台的每日推荐（Boss + 智联 + 猎聘）"""
+    parts = [sync_boss_recommends(), sync_zhaopin_recommends()]
+    try:
+        parts.append(sync_liepin_recommends())
+    except Exception as e:
+        parts.append(f"猎聘推荐: ⚠ {e}")
+    return "\n".join(parts)
 
 
 def sync_boss_applications() -> str:
@@ -1277,6 +1283,69 @@ def sync_zhaopin_recommends() -> str:
         return f"智联推荐: ⚠ {e}"
 
 
+# ---- 猎聘 ----
+
+def _import_liepin():
+    import os, sys, importlib.util
+    try:
+        import liepin
+        return liepin, None
+    except ImportError:
+        lp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "liepin.py")
+        spec = importlib.util.spec_from_file_location("liepin", lp)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules["liepin"] = mod
+            spec.loader.exec_module(mod)
+            return mod, None
+        return None, f"猎聘模块未找到: {lp}"
+
+
+def sync_liepin_applications() -> str:
+    """同步猎聘投递数据"""
+    lp, err = _import_liepin()
+    if not lp:
+        return err
+    lines = ["猎聘今日投递："]
+    total = 0
+    for tab, fetcher in [
+        ("已投递", lp.fetch_liepin_applied),
+        ("已查看", lp.fetch_liepin_viewed),
+        ("面试", lp.fetch_liepin_interview),
+        ("收藏", lp.fetch_liepin_collect),
+    ]:
+        try:
+            jobs = fetcher()
+            n = lp._save_to_storage(jobs)
+            total += n
+            lines.append(f"  {tab}: {len(jobs)}条 → 新增{n}条")
+        except Exception as e:
+            lines.append(f"  {tab}: ⚠ {e}")
+    lines.append(f"\n今日共新增 {total} 条")
+    return "\n".join(lines)
+
+
+def sync_liepin_recommends() -> str:
+    """同步猎聘推荐"""
+    lp, err = _import_liepin()
+    if not lp:
+        return err
+    try:
+        jobs = lp.fetch_liepin_recommend()
+        n = lp._save_to_storage(jobs)
+        return f"猎聘推荐同步完成，新增 {n} 条"
+    except Exception as e:
+        return f"猎聘推荐: ⚠ {e}"
+
+
+def export_liepin_to_excel(date: str = None) -> str:
+    """导出猎聘Excel"""
+    lp, err = _import_liepin()
+    if not lp:
+        return err
+    return lp.export_liepin_excel(date_filter=date)
+
+
 SKILL_MAP = {
     "sync_all_applications": sync_all_applications,
     "sync_all_recommends": sync_all_recommends,
@@ -1284,6 +1353,9 @@ SKILL_MAP = {
     "sync_boss_recommends": sync_boss_recommends,
     "sync_zhaopin_applications": sync_zhaopin_applications,
     "sync_zhaopin_recommends": sync_zhaopin_recommends,
+    "sync_liepin_applications": sync_liepin_applications,
+    "sync_liepin_recommends": sync_liepin_recommends,
+    "export_liepin_to_excel": export_liepin_to_excel,
     "run_setup_wizard": run_setup_wizard,
     "show_current_settings": show_current_settings,
     "select_ai_model": select_ai_model,

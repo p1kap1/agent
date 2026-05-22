@@ -8,6 +8,7 @@ CONV_DIR = os.path.join(DATA_DIR, "conversations")
 REPORT_DIR = os.path.join(DATA_DIR, "reports", "daily")
 BOSS_DIR = os.path.join(DATA_DIR, "reports", "boss")
 ZHAOPIN_DIR = os.path.join(DATA_DIR, "reports", "zhaopin")
+LIEPIN_DIR = os.path.join(DATA_DIR, "reports", "liepin")
 JOB_FILE = os.path.join(DATA_DIR, "applications.json")
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 
