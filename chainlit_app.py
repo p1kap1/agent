@@ -1,8 +1,33 @@
 import chainlit as cl
 from agent import WorkAgent
+import json
+import os
+
+# ---- 聊天记录本地持久化 ----
+CHAT_HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "chat_history.json")
 
 
-# ---- Python 3.14 + nest_asyncio compat ----
+def _save_chat_history():
+    """保存当前对话到 JSON 文件"""
+    try:
+        history = cl.user_session.get("chat_history", [])
+        if history:
+            os.makedirs(os.path.dirname(CHAT_HISTORY_FILE), exist_ok=True)
+            with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(history[-100:], f, ensure_ascii=False)  # 最多保留100条
+    except Exception:
+        pass
+
+
+def _load_chat_history() -> list:
+    """从 JSON 文件恢复对话"""
+    if os.path.exists(CHAT_HISTORY_FILE):
+        try:
+            with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
 # nest_asyncio._run_once pops the current task before executing callbacks,
 # causing asyncio.current_task() to return None. This breaks:
 # 1. anyio._core._eventloop.current_async_library() → NoEventLoopError
@@ -176,6 +201,10 @@ async def start():
         pass
 
     cl.user_session.set("setup_mode", False)
+
+    # 新会话：清空对话历史
+    cl.user_session.set("chat_history", [])
+
     await cl.Message(
         content="嗨～我是 **FlowMate**，你的专属工作伴侣 💼\n\n"
         "我能帮你打理这些事：\n\n"
@@ -192,9 +221,51 @@ async def start():
     ).send()
 
 
+@cl.on_chat_resume
+async def resume(thread: dict):
+    """刷新页面恢复历史"""
+    history = _load_chat_history()
+    if history:
+        for msg in history[-20:]:
+            await cl.Message(author=msg.get("author"), content=msg.get("content", "")).send()
+        await cl.Message(content=f"👋 欢迎回来！上次 {len(history)} 条记录已恢复。说「帮助」查看功能。").send()
+    else:
+        await cl.Message(content=f"👋 欢迎回来！说「帮助」查看功能列表。").send()
+
+
+@cl.on_chat_resume
+async def resume(thread: dict):
+    """用户刷新页面，恢复历史记录"""
+    await cl.Message(
+        content=f"👋 欢迎回来！上次对话还在，继续聊吧～\n"
+        f"说「帮助」可以随时查看功能列表。"
+    ).send()
+
+
 @cl.on_message
 async def on_message(message: cl.Message):
     agent: WorkAgent = cl.user_session.get("agent")
+    msg = message.content.strip()
+
+    # 功能介绍 / 帮助：直接回复，不需 AI
+    if any(w in msg for w in ["你能做什么", "功能介绍", "有什么功能", "怎么用", "帮助", "help", "使用指南", "全部功能"]):
+        await cl.Message(
+            content="💼 **FlowMate 能帮你做这些**：\n\n"
+            "📮 **求职管家**\n"
+            "「同步投递」Boss+智联+猎聘 ·「同步推荐」·「投递汇总」\n"
+            "「导出Excel」·「投递表」·「每日推荐表」·「图表」\n\n"
+            "📝 **日报助手**\n"
+            "「生成日报」投递分析+学习建议+技能推荐\n"
+            "「项目总结」·「搜索XX最新资料」（实时搜索引擎）\n\n"
+            "📁 **文件上传**\n"
+            "拖 md/pdf/txt/json/log 到对话框 → 自动分析\n\n"
+            "🔧 **工具箱**\n"
+            "「查看配置」·「提交到GitHub」·「切换用户」·「刷新猎聘」\n\n"
+            "📊 **多平台**\n"
+            "Boss直聘 · 智联招聘 · 猎聘 | 支持 DeepSeek/OpenAI/智谱\n\n"
+            "今天想从哪儿开始？😊"
+        ).send()
+        return
 
     # 配置模式：本地处理设置命令，不经过 AI
     if cl.user_session.get("setup_mode"):
@@ -218,17 +289,66 @@ async def on_message(message: cl.Message):
 
     # 文件上传处理
     if message.elements:
+        import os, re, time, uuid
+        upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+
         for element in message.elements:
-            if element.name and element.content:
-                import os
-                upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "uploads")
-                os.makedirs(upload_dir, exist_ok=True)
-                filepath = os.path.join(upload_dir, element.name)
-                content = element.content.decode("utf-8") if isinstance(element.content, bytes) else str(element.content)
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(content)
-                await cl.Message(content=f"✅ 已保存 `{element.name}`，说「导入 {element.name}」即可加载内容。").send()
-                return
+            if not element.name:
+                continue
+
+            content = None
+            # 优先从 content 读取，失败则从 path 读取
+            try:
+                content = element.content
+            except Exception:
+                pass
+
+            if content is None and hasattr(element, "path") and element.path and os.path.exists(element.path):
+                try:
+                    with open(element.path, "rb") as f:
+                        content = f.read()
+                except Exception:
+                    pass
+
+            if content is None:
+                await cl.Message(content=f"⚠ `{element.name}` 内容为空或读取失败").send()
+                continue
+                await cl.Message(content=f"⚠ `{element.name}` 读取失败").send()
+                continue
+
+            # 安全文件名
+            name = os.path.basename(element.name)
+            name = re.sub(r'[^\w\.\-]', '_', name)
+            base, ext = os.path.splitext(name)
+            ext = ext.lower()
+            if len(base) > 40:
+                base = base[:40]
+            safe_name = f"{base}_{int(time.time())}_{uuid.uuid4().hex[:6]}{ext}"
+
+            allowed = {".md", ".txt", ".json", ".log", ".py", ".csv", ".html", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".pdf"}
+            if ext not in allowed:
+                await cl.Message(content=f"⚠ 不支持 `{ext}`，支持: {', '.join(sorted(allowed))}").send()
+                continue
+
+            filepath = os.path.join(upload_dir, safe_name)
+            try:
+                if isinstance(content, bytes):
+                    with open(filepath, "wb") as f:
+                        f.write(content)
+                else:
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write(str(content))
+            except Exception as e:
+                await cl.Message(content=f"❌ 保存失败: {e}").send()
+                continue
+
+            chars = len(content)
+            await cl.Message(
+                content=f"📎 已保存 `{element.name}` ({chars:,} 字符)\n"
+                f"说「生成日报」即可将其纳入分析。"
+            ).send()
+        return
 
     try:
         reply = agent.chat(message.content)
@@ -248,6 +368,13 @@ async def on_message(message: cl.Message):
         os.remove(debug_log)
     
     await cl.Message(content=reply + debug_info).send()
+
+    # 保存对话历史
+    history = cl.user_session.get("chat_history", [])
+    history.append({"author": "用户", "content": msg})
+    history.append({"author": "FlowMate", "content": reply})
+    cl.user_session.set("chat_history", history)
+    _save_chat_history()
 
 
 def _handle_setup_command(msg: str) -> str | None:

@@ -838,8 +838,28 @@ FUNCTION_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "show_current_settings",
-            "description": "查看当前配置。用户说「配置」「设置」「信息」时调用。",
+            "name": "show_all_charts",
+            "description": "一次性展示全部图表（投递趋势+状态分布+平台对比）",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skill_web_search",
+            "description": "搜索引擎查询最新资料。用户说「搜索XX最新资料」「帮我查一下XX」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "搜索关键词"}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skill_refresh_liepin",
+            "description": "生成刷新猎聘Cookie的脚本，用于解决猎聘登录态过期问题。用户说「刷新猎聘」「猎聘过期了」时调用。",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -1402,6 +1422,26 @@ def show_all_charts() -> str:
     return chart_all()
 
 
+# ---- 外部工具（MCP 风格）----
+
+def skill_web_search(query: str) -> str:
+    """网页搜索"""
+    try:
+        import tools
+    except ImportError:
+        return "工具模块未安装。"
+    return tools.web_search(query)
+
+
+def skill_refresh_liepin() -> str:
+    """刷新猎聘 Cookie"""
+    try:
+        import tools
+    except ImportError:
+        return "工具模块未安装。"
+    return tools.refresh_liepin_cookie()
+
+
 def export_all_delivery(date: str = None) -> str:
     """导出全部平台投递（不含推荐）"""
     from boss import export_excel as boss_delivery
@@ -1451,6 +1491,8 @@ SKILL_MAP = {
     "show_status_pie": show_status_pie,
     "show_platform_compare": show_platform_compare,
     "show_all_charts": show_all_charts,
+    "skill_web_search": skill_web_search,
+    "skill_refresh_liepin": skill_refresh_liepin,
     "run_setup_wizard": run_setup_wizard,
     "show_current_settings": show_current_settings,
     "select_ai_model": select_ai_model,
