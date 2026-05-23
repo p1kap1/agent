@@ -106,6 +106,32 @@ def _request_api(endpoint: str, extra_params: dict = None) -> dict:
 def _parse_item(item: dict, status: str) -> dict:
     """解析智联职位数据为统一格式"""
     staff = item.get("staffCard") or {}
+
+    # 计算 happen_time：已投递/收藏的 displayDate 才是投递时间，不是 jobPostingTime
+    display_date = item.get("displayDate", "")
+    happen_time = ""
+    if display_date:
+        from datetime import datetime as _dt, timedelta as _td
+        if "今天" in display_date:
+            happen_time = str(int(_dt.now().timestamp() * 1000))
+        elif "昨天" in display_date:
+            yesterday = _dt.now() - _td(days=1)
+            happen_time = str(int(yesterday.timestamp() * 1000))
+        else:
+            # 尝试解析 "YYYY-MM-DD" 或 "MM-DD" 格式
+            try:
+                ds = display_date[:10]
+                if len(ds) >= 10:
+                    d = _dt.strptime(ds, "%Y-%m-%d")
+                else:
+                    d = _dt.strptime(f"{_dt.now().year}-{ds}", "%Y-%m-%d")
+                happen_time = str(int(d.timestamp() * 1000))
+            except Exception:
+                pass
+    # 兜底：推荐用 jobPostingTime，已投递/收藏无 displayDate 也用 jobPostingTime
+    if not happen_time:
+        happen_time = str(item.get("jobPostingTime", "")) or str(item.get("publishTime", ""))
+
     return {
         "encrypt_job_id": item.get("number") or item.get("jobId", ""),
         "encrypt_brand_id": item.get("companyNumber") or item.get("companyId", ""),
@@ -123,8 +149,8 @@ def _parse_item(item: dict, status: str) -> dict:
         "stage": item.get("propertyName") or item.get("property", ""),
         "industry": item.get("industryName", ""),
         "scale": item.get("companySize", ""),
-        "action_date": item.get("displayDate", ""),
-        "happen_time": str(item.get("jobPostingTime", "")) or str(item.get("publishTime", "")),
+        "action_date": display_date,
+        "happen_time": happen_time,
     }
 
 
@@ -148,32 +174,40 @@ def _save_to_storage(jobs: list[dict], today_only: bool = True) -> int:
 
     existing = _load_jobs()
     seen = {(j.get("encrypt_job_id", ""), j.get("status", "")) for j in existing}
-    new_count = 0
+    passed = 0  # 通过 today_only 的总数（用于显示）
     today = date.today().isoformat()
 
     for job in jobs:
         jid = job.get("encrypt_job_id", "")
         status = job.get("status", "")
+        if not jid:
+            continue
+
+        # 推荐类：平台返回的就是今日推荐，直接以当天记录
+        is_recommend = "推荐" in status
+        if is_recommend:
+            record_date = today
+        else:
+            ts = job.get("happen_time", "")
+            if not ts and today_only:
+                continue
+            record_date = today
+            if ts:
+                try:
+                    from datetime import datetime as _dt
+                    record_date = _dt.fromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d")
+                except:
+                    pass
+
+            if today_only and record_date != today:
+                continue
+
+        passed += 1
+
         key = (jid, status)
-        if not jid or key in seen:
-            continue
+        if key in seen:
+            continue  # 去重：已存在的不重复存储
         seen.add(key)
-
-        # 推荐/收藏类数据不受 today_only 限制
-        is_recommend_or_collect = ("推荐" in status or "收藏" in status)
-
-        # 按 happenTime 计算日期
-        ts = job.get("happen_time", "")
-        record_date = today
-        if ts:
-            try:
-                from datetime import datetime as _dt
-                record_date = _dt.fromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d")
-            except:
-                pass
-
-        if today_only and not is_recommend_or_collect and record_date != today:
-            continue
 
         notes_parts = []
         if job.get("salary"):
@@ -198,10 +232,9 @@ def _save_to_storage(jobs: list[dict], today_only: bool = True) -> int:
             scale=job.get("scale", ""),
             happen_time=job.get("happen_time", ""),
         )
-        new_count += 1
         time.sleep(0.05)
 
-    return new_count
+    return passed  # 返回今日过滤后的总数（非去重后的新增数）
 
 
 def fetch_zhaopin_applied() -> list[dict]:

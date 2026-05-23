@@ -174,7 +174,7 @@ class TestDedup(unittest.TestCase):
         self.orig_file = JOB_FILE
 
     def test_dedup_by_id_and_status(self):
-        """同 job_id + 同 status 不重复存储"""
+        """同 job_id + 同 status 不重复存储（但计数不依赖去重）"""
         from boss import _save_jobs_to_storage
 
         jobs = [
@@ -199,7 +199,7 @@ class TestDedup(unittest.TestCase):
         ]
 
         n = _save_jobs_to_storage(jobs, today_only=False)
-        self.assertEqual(n, 1, "同job_id+同status应只存1条")
+        self.assertEqual(n, 2, "计数不依赖去重，同job同status各算一条")
 
     def test_different_status_stored_separately(self):
         """同 job_id + 不同 status 分别存储"""
@@ -255,25 +255,18 @@ class TestDedup(unittest.TestCase):
         self.assertEqual(n, 1, "today_only应只存今天的数据")
 
     def test_today_only_skips_recommend(self):
-        """推荐类不受 today_only 限制"""
+        """推荐始终以当天记录（平台返回的就是今日推荐）"""
         from boss import _save_jobs_to_storage
-        import time
-
         yesterday = date.today() - timedelta(days=1)
         yesterday_ts = int(yesterday.strftime("%s")) * 1000
 
         jobs = [
-            {
-                "encrypt_job_id": "test005",
-                "company": "推荐公司",
-                "position": "推荐岗位",
-                "status": "每日推荐",
-                "happen_time": str(yesterday_ts),
-            },
+            {"encrypt_job_id": "test005", "company": "推荐公司",
+             "position": "推荐岗位", "status": "每日推荐",
+             "happen_time": str(yesterday_ts)},
         ]
-
         n = _save_jobs_to_storage(jobs, today_only=True)
-        self.assertEqual(n, 1, "推荐类应不受today_only限制")
+        self.assertEqual(n, 1, "推荐不受 happenTime 限制，始终算今日")
 
 
 class TestDateCalc(unittest.TestCase):

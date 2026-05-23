@@ -27,17 +27,25 @@ def _load_system_prompt() -> str:
     return content.replace("{{today}}", date.today().isoformat())
 
 
-def _count_chars(messages: list[dict]) -> int:
-    return sum(len(m.get("content", "")) for m in messages)
+def _count_chars(messages: list) -> int:
+    total = 0
+    for m in messages:
+        if hasattr(m, "content"):
+            total += len(m.content or "")
+        elif isinstance(m, dict):
+            total += len(m.get("content", ""))
+    return total
 
 
 def _compress_history(agent) -> None:
     """压缩历史：保留系统提示 + 最近 KEEP_RECENT 轮，其余总结为记忆"""
     msgs = agent.messages
+    if len(msgs) < KEEP_RECENT * 2 + 10:
+        return  # 太少不需要压缩
+
     if _count_chars(msgs) < MAX_CONTEXT_CHARS:
         return
 
-    # 分离系统提示 + 最近轮次
     system_msg = msgs[0]
     recent = msgs[-KEEP_RECENT * 2:]
     old_messages = msgs[1:-KEEP_RECENT * 2]
@@ -47,13 +55,14 @@ def _compress_history(agent) -> None:
 
     # 把旧消息喂给 AI 生成摘要
     summary_prompt = "请用一两句话概括以下对话历史中的关键信息。只说要点，不要废话。\n\n"
-    for m in old_messages[-20:]:  # 最多取20条旧消息做摘要
-        role = m.get("role", "?")
+    for m in old_messages[-20:]:
+        content = m.content if hasattr(m, "content") else m.get("content", "")
+        role = m.role if hasattr(m, "role") else m.get("role", "?")
         if role == "tool":
-            summary_prompt += f"[工具结果]: {m.get('content', '')[:200]}\n"
+            summary_prompt += f"[工具结果]: {content[:200]}\n"
         elif role in ("user", "assistant"):
             who = "用户" if role == "user" else "助手"
-            summary_prompt += f"[{who}]: {m.get('content', '')[:300]}\n"
+            summary_prompt += f"[{who}]: {content[:300]}\n"
 
     try:
         summary_resp = client.chat.completions.create(
@@ -65,7 +74,6 @@ def _compress_history(agent) -> None:
     except Exception:
         memory = "（对话历史已压缩）"
 
-    # 重建消息：系统提示 + 记忆 + 最近轮次
     memory_context = f"[历史记忆] {memory}\n\n今天的日期是 {date.today().isoformat()}。"
 
     agent.messages = [

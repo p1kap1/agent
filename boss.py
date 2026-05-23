@@ -288,12 +288,13 @@ def fetch_daily_recommend() -> list[dict]:
 
 
 def _save_jobs_to_storage(jobs: list[dict], today_only: bool = True) -> int:
-    """将职位列表写入 applications.json，同批次同状态去重。today_only 只存今天的数据"""
-    from storage import add_application
+    """将职位列表写入 applications.json，跨会话去重。today_only 只存今天的数据"""
+    from storage import add_application, _load_jobs
     import datetime as _dt_local
 
-    seen = set()
-    new_count = 0
+    existing = _load_jobs()
+    seen = {(j.get("encrypt_job_id", ""), j.get("status", "")) for j in existing}
+    passed = 0  # 通过 today_only 的总数（用于显示）
     today = _dt_local.date.today()
 
     for job in jobs:
@@ -301,24 +302,32 @@ def _save_jobs_to_storage(jobs: list[dict], today_only: bool = True) -> int:
         if not jid:
             continue
         status = job.get("status", "")
+
+        # 推荐类：平台每日推荐本身就是今天的，直接以当天记录
+        # 其他类型：按 happenTime 做 today_only 过滤
+        is_recommend = "推荐" in job.get("status", "") or "recommend" in job.get("status", "").lower()
+        if is_recommend:
+            record_date = today.isoformat()
+        else:
+            ts = job.get("happen_time", "")
+            record_date = today.isoformat()
+            if ts:
+                try:
+                    record_date = _dt_local.datetime.fromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d")
+                except (ValueError, OSError):
+                    pass
+
+            if today_only and record_date != today.isoformat():
+                continue
+
+        # 通过 today_only → 计数（不依赖去重，保证每次同步都显示今日总数）
+        passed += 1
+
+        # 去重：已存在的跳过存储，但已计入 passed
         key = (jid, status)
         if key in seen:
             continue
         seen.add(key)
-
-        # 按 happenTime 计算日期
-        ts = job.get("happen_time", "")
-        record_date = today.isoformat()
-        if ts:
-            try:
-                record_date = _dt_local.datetime.fromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d")
-            except (ValueError, OSError):
-                pass
-
-        # 推荐/收藏类数据不受 today_only 限制
-        is_recommend_or_collect = ("推荐" in job.get("status", "") or "recommend" in job.get("status", "").lower() or "收藏" in job.get("status", ""))
-        if today_only and not is_recommend_or_collect and record_date != today.isoformat():
-            continue
 
         notes_parts = []
         if job.get("salary"):
@@ -363,10 +372,9 @@ def _save_jobs_to_storage(jobs: list[dict], today_only: bool = True) -> int:
             scale=job.get("scale", ""),
             happen_time=job.get("happen_time", ""),
         )
-        new_count += 1
         time.sleep(0.05)
 
-    return new_count
+    return passed  # 返回今日过滤后的总数（非去重后的新增数）
 
 
 def sync_all(today_only: bool = True) -> dict:

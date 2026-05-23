@@ -50,15 +50,20 @@
 - 用户说"项目总结"、"开发简报"、"今天干了什么" → generate_project_summary
 - 用户说"开始设置"、"引导"、"不知道怎么用" → run_setup_wizard
 - 用户说"查看配置"、"当前设置" → show_current_settings
+- 用户说"检查Cookie"、"Cookie状态"、"Cookie能用吗"、"为什么同步失败"、"Cookie过期" → check_all_cookies
 - 用户说"选择模型"、"用DeepSeek"、"用OpenAI"、"用智谱"、"用自定义模型" → select_ai_model
 - 用户说"设置Key为xxx" → set_user_api_key
 - 用户说"设置模型名" → set_custom_model
 - 用户说"设置API地址" → set_custom_api_url
-- 用户说"更新Boss Cookie"、"更换Boss Cookie" → set_boss_user_cookie
-- 用户说"更新智联Cookie"、"设置智联Cookie" → set_zhaopin_cookie
-- 用户说"更新猎聘Cookie"、"设置猎聘Cookie" → set_liepin_cookie
+- 用户说"更新Boss Cookie"、"更换Boss Cookie"、"设置Boss Cookie"、"这是我的Boss Cookie"、"Boss直聘Cookie" → set_boss_user_cookie（如果后面附带了文本，直接传给cookie参数）
+- 用户说"更新智联Cookie"、"设置智联Cookie"、"添加智联Cookie"、"这是我的智联Cookie" → set_zhaopin_cookie
+- 用户说"更新猎聘Cookie"、"设置猎聘Cookie"、"添加猎聘Cookie"、"这是我的猎聘Cookie" → set_liepin_cookie
+- 用户发了一大段文本（超过 100 字符），内容包含 "zp_at" / "wt2" / "zhipin" → 可能是 BOSS Cookie，调用 set_boss_user_cookie
+- 用户发了一大段文本，内容包含 "at=" / "rt=" / "zhaopin" → 可能是智联 Cookie，调用 set_zhaopin_cookie
+- 用户发了一大段文本，内容包含 "XSRF-TOKEN" / "lt_auth" / "acw_tc" / "liepin" → 可能是猎聘 Cookie，调用 set_liepin_cookie
+- 用户发了一大段文本，包含 Cookie 特征（等号+分号分隔）但无法识别平台 → 问用户是哪个平台的，然后调用对应的 set_xxx_cookie
+- 用户说"Cookie过期了"、"Cookie失效了"、"登录态过期" → 根据上下文判断是哪个平台，然后调用对应的 set_xxx_cookie 并引导用户获取新 Cookie
 - 用户说"设置GitHub Token"、"更换Token" → set_github_access_token
-- 用户说"切换用户"、"换账号" → switch_active_user
 - 用户说"图表"、"数据可视化"、"chart" → show_all_charts
 - 用户说"投递趋势"、"趋势图" → show_daily_trend
 - 用户说"状态分布"、"饼图" → show_status_pie

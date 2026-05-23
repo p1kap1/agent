@@ -152,30 +152,40 @@ def _save_to_storage(jobs: list[dict], today_only: bool = True) -> int:
 
     existing = _load_jobs()
     seen = {(j.get("encrypt_job_id", ""), j.get("status", "")) for j in existing}
-    new_count = 0
+    passed = 0  # 通过 today_only 的总数（用于显示）
     today = date.today().isoformat()
 
     for job in jobs:
         jid = job.get("encrypt_job_id", "")
         status = job.get("status", "")
+        if not jid:
+            continue
+
+        # 推荐类：平台返回的就是今日推荐，直接以当天记录
+        is_recommend = "推荐" in status
+        if is_recommend:
+            record_date = today
+        else:
+            ts = job.get("happen_time", "")
+            if not ts and today_only:
+                continue
+            record_date = today
+            if ts:
+                try:
+                    from datetime import datetime as _dt
+                    record_date = _dt.fromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d")
+                except:
+                    pass
+
+            if today_only and record_date != today:
+                continue
+
+        passed += 1
+
         key = (jid, status)
-        if not jid or key in seen:
-            continue
+        if key in seen:
+            continue  # 去重：已存在的不重复存储
         seen.add(key)
-
-        ts = job.get("happen_time", "")
-        record_date = today
-        if ts:
-            try:
-                from datetime import datetime as _dt
-                record_date = _dt.fromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d")
-            except:
-                pass
-
-        # 推荐/收藏类数据不受 today_only 限制
-        is_recommend_or_collect = ("推荐" in job.get("status", "") or "收藏" in job.get("status", ""))
-        if today_only and not is_recommend_or_collect and record_date != today:
-            continue
 
         notes_parts = []
         if job.get("salary"):
@@ -200,10 +210,9 @@ def _save_to_storage(jobs: list[dict], today_only: bool = True) -> int:
             scale=job.get("scale", ""),
             happen_time=job.get("happen_time", ""),
         )
-        new_count += 1
         time.sleep(0.05)
 
-    return new_count
+    return passed  # 返回今日过滤后的总数（非去重后的新增数）
 
 
 def fetch_liepin_applied() -> list[dict]:
@@ -303,6 +312,7 @@ def export_liepin_delivery_excel(date_filter: str = None) -> str:
     hfont = Font(bold=True, size=11)
     hfill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
     bdr = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+    link_font = Font(color="0563C1", underline="single")
     icons = {"猎聘-已投递": "📤 已投递", "猎聘-已查看": "👁 已查看", "猎聘-面试": "🎯 面试", "猎聘-收藏": "⭐ 收藏"}
 
     row = 1
@@ -323,6 +333,12 @@ def export_liepin_delivery_excel(date_filter: str = None) -> str:
         for col, val in enumerate(vals, 1):
             c = ws.cell(row=row, column=col, value=val)
             c.border = bdr; c.alignment = Alignment(vertical="center")
+            if col == 4:
+                cid = j.get("encrypt_brand_id", "")
+                if cid: c.font = link_font; c.hyperlink = f"https://www.liepin.com/company/{cid}/"
+            if col == 6:
+                jid = j.get("encrypt_job_id", "")
+                if jid: c.font = link_font; c.hyperlink = f"https://www.liepin.com/job/{jid}.shtml"
         row += 1
 
     for i, w in enumerate([6, 12, 16, 22, 24, 28, 14, 16], 1):
@@ -364,6 +380,7 @@ def export_liepin_recommend_excel(date_filter: str = None) -> str:
     hfont = Font(bold=True, size=11)
     hfill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
     bdr = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+    link_font = Font(color="0563C1", underline="single")
 
     row = 1
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
@@ -381,6 +398,12 @@ def export_liepin_recommend_excel(date_filter: str = None) -> str:
         for col, val in enumerate(vals, 1):
             c = ws.cell(row=row, column=col, value=val)
             c.border = bdr; c.alignment = Alignment(vertical="center")
+            if col == 3:
+                cid = j.get("encrypt_brand_id", "")
+                if cid: c.font = link_font; c.hyperlink = f"https://www.liepin.com/company/{cid}/"
+            if col == 4:
+                jid = j.get("encrypt_job_id", "")
+                if jid: c.font = link_font; c.hyperlink = f"https://www.liepin.com/job/{jid}.shtml"
         row += 1
 
     for i, w in enumerate([6, 10, 22, 30, 14, 10, 10, 8, 20], 1):

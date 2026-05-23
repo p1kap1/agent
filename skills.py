@@ -322,14 +322,6 @@ def set_liepin_cookie(cookie_str: str) -> str:
     return mod.set_liepin_cookie(cookie_str)
 
 
-def change_user_role(username: str, role: str = "dev") -> str:
-    """设置用户角色"""
-    mod, err = _import_settings()
-    if not mod:
-        return err
-    return mod.set_user_role(username, role)
-
-
 def set_github_access_token(token: str) -> str:
     """设置 GitHub Token"""
     mod, err = _import_settings()
@@ -658,13 +650,7 @@ def git_display_status() -> str:
 # ---- 项目总结 ----
 
 def generate_project_summary(date: str = None) -> str:
-    """根据对话记录生成项目开发总结（开发者功能）"""
-    try:
-        from settings import is_developer
-        if not is_developer():
-            return "项目总结是开发者专属功能。试试「生成日报」获取你的日常总结吧。"
-    except Exception:
-        pass
+    """根据对话记录生成项目开发总结"""
     if not date:
         date = _dt.date.today().isoformat()
 
@@ -731,13 +717,7 @@ def _load_devlog(date_str: str) -> str:
 
 
 def import_devlog() -> str:
-    """将 devlog.md 导入到今日对话记录中（仅开发者可用）"""
-    try:
-        from settings import is_developer
-        if not is_developer():
-            return "此功能仅对开发者开放。"
-    except Exception:
-        pass
+    """将 devlog.md 导入到今日对话记录中"""
     import os
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devlog.md")
     if not os.path.exists(path):
@@ -751,6 +731,46 @@ def import_devlog() -> str:
 
 
 # ---- 上传文件管理 ----
+
+def check_all_cookies() -> str:
+    """检查三平台 Cookie 状态并返回详细报告（让用户一眼看出哪个平台可用）"""
+    mod, err = _import_settings()
+    if not mod:
+        return err
+    lines = ["## 🔐 Cookie 状态检查", ""]
+    for platform, test_fn, setup_fn, label in [
+        ("Boss直聘", mod._test_boss_cookie, "更新Boss Cookie", "💼"),
+        ("智联招聘", mod._test_zhaopin_cookie, "更新智联Cookie", "🔷"),
+        ("猎聘", mod._test_liepin_cookie, "更新猎聘Cookie", "🔶"),
+    ]:
+        try:
+            env = mod._load_env()
+            users = mod._load_users()
+            active = users.get("active_user", "default")
+            user_cfg = users.get("users", {}).get(active, {})
+            if platform == "Boss直聘":
+                cookie = user_cfg.get("boss_cookie", "")
+            elif platform == "智联招聘":
+                zp = user_cfg.get("zhaopin", {})
+                cookie = zp.get("cookie_json", "") if isinstance(zp, dict) else ""
+            else:
+                lp = user_cfg.get("liepin", {})
+                cookie = lp.get("cookie", "") if isinstance(lp, dict) else ""
+            status = test_fn(cookie)
+            if status == "valid":
+                lines.append(f"{label} **{platform}**：✅ Cookie 有效，可以正常同步")
+            elif status == "expired":
+                lines.append(f"{label} **{platform}**：⚠️ Cookie 已过期 → 说「{setup_fn}」重新配置")
+            elif status == "not_set":
+                lines.append(f"{label} **{platform}**：❌ 未配置 → 说「{setup_fn}」开始配置")
+            else:
+                lines.append(f"{label} **{platform}**：⚠️ 无法验证（{status}）")
+        except Exception as e:
+            lines.append(f"{label} **{platform}**：❌ 检测失败：{e}")
+    lines.append("")
+    lines.append("Cookie 获取方法：浏览器登录 → F12 → Application → Cookies → 全选复制 → 粘贴给我")
+    return "\n".join(lines)
+
 
 def list_uploaded_files() -> str:
     """列出所有上传的文件"""
@@ -951,10 +971,10 @@ FUNCTION_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_boss_user_cookie",
-            "description": "设置Boss直聘Cookie。用户说「更新Boss Cookie」时调用。",
+            "description": "设置/更新Boss直聘Cookie。用户说「更新Boss Cookie」「设置Boss Cookie」「这是我的Boss Cookie」时调用，或用户直接粘贴包含zp_at/wt2的长文本时调用。",
             "parameters": {
                 "type": "object",
-                "properties": {"cookie": {"type": "string", "description": "完整Cookie字符串"}},
+                "properties": {"cookie": {"type": "string", "description": "从浏览器复制的完整Cookie字符串（如 zp_at=xxx; wt2=yyy; ...），用户可能直接粘贴长文本"}},
                 "required": ["cookie"],
             },
         },
@@ -963,10 +983,10 @@ FUNCTION_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_zhaopin_cookie",
-            "description": "设置智联招聘Cookie。用户说「更新智联Cookie」时调用。",
+            "description": "设置/更新智联招聘Cookie。用户说「更新智联Cookie」「设置智联Cookie」「这是我的智联Cookie」时调用，或用户直接粘贴包含at=/rt=的长文本时调用。",
             "parameters": {
                 "type": "object",
-                "properties": {"cookie_json": {"type": "string", "description": "智联Cookie的JSON字符串"}},
+                "properties": {"cookie_json": {"type": "string", "description": "智联Cookie内容，支持浏览器导出的JSON格式或原始Cookie字符串"}},
                 "required": ["cookie_json"],
             },
         },
@@ -975,10 +995,10 @@ FUNCTION_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_liepin_cookie",
-            "description": "设置猎聘Cookie。用户说「更新猎聘Cookie」时调用。",
+            "description": "设置/更新猎聘Cookie。用户说「更新猎聘Cookie」「设置猎聘Cookie」「这是我的猎聘Cookie」时调用，或用户直接粘贴包含XSRF-TOKEN/lt_auth/acw_tc的长文本时调用。",
             "parameters": {
                 "type": "object",
-                "properties": {"cookie_str": {"type": "string", "description": "猎聘Cookie字符串"}},
+                "properties": {"cookie_str": {"type": "string", "description": "猎聘Cookie内容，支持浏览器导出的JSON数组格式或原始Cookie字符串"}},
                 "required": ["cookie_str"],
             },
         },
@@ -1005,6 +1025,14 @@ FUNCTION_DEFINITIONS = [
                 "properties": {"username": {"type": "string", "description": "用户名"}},
                 "required": ["username"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_all_cookies",
+            "description": "检查三平台Cookie状态（有效性诊断）。用户说「检查Cookie」「Cookie状态」「Cookie正常吗」「为什么同步失败」时调用。",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -1099,6 +1127,22 @@ FUNCTION_DEFINITIONS = [
         "function": {
             "name": "sync_zhaopin_all",
             "description": "同步智联招聘的已投递、我的收藏、职位推荐数据。用户说「同步智联」「智联招聘」时调用。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_liepin_applications",
+            "description": "只同步猎聘的投递数据（已投递/已查看/面试/收藏）。用户说「同步猎聘」「猎聘投递」时调用。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_liepin_recommends",
+            "description": "只同步猎聘的每日推荐。用户说「同步猎聘推荐」「猎聘每日推荐」时调用。",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -1300,7 +1344,7 @@ def sync_boss_applications() -> str:
     boss, err = _import_boss()
     if not boss:
         return f"Boss模块: {err}"
-    lines = ["Boss直聘今日投递："]
+    lines = []
     total = 0
     for tab, fetcher in [
         ("沟通过", boss.fetch_boss_channels),
@@ -1312,11 +1356,84 @@ def sync_boss_applications() -> str:
             jobs = fetcher()
             n = boss._save_jobs_to_storage(jobs)
             total += n
-            lines.append(f"  {tab}: {len(jobs)}条 → 新增{n}条")
+            if n > 0:
+                lines.append(f"{tab} +{n}")
         except Exception as e:
-            lines.append(f"  {tab}: ⚠ {e}")
-    lines.append(f"\n今日共新增 {total} 条投递记录")
-    return "\n".join(lines)
+            lines.append(f"⚠ {e}")
+    if lines:
+        return f"Boss直聘 新增 {total} 条（{', '.join(lines)}）"
+    return "Boss直聘 无新增"
+
+
+def sync_zhaopin_applications() -> str:
+    """只同步 智联招聘 投递数据"""
+    try:
+        import zhaopin as _zp
+    except ImportError:
+        import os, sys, importlib.util
+        zp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zhaopin.py")
+        spec = importlib.util.spec_from_file_location("zhaopin", zp)
+        _zp = importlib.util.module_from_spec(spec)
+        sys.modules["zhaopin"] = _zp
+        spec.loader.exec_module(_zp)
+
+    lines = []
+    total = 0
+    all_zero = True  # 检测是否所有 tab 都无数据
+    for tab, fetcher in [
+        ("已投递", _zp.fetch_zhaopin_applied),
+        ("收藏", _zp.fetch_zhaopin_collect),
+    ]:
+        try:
+            jobs = fetcher()
+            n = _zp._save_to_storage(jobs)
+            total += n
+            if len(jobs) > 0:
+                all_zero = False
+            if n > 0:
+                lines.append(f"{tab} +{n}")
+        except PermissionError:
+            return "❌ 智联 Cookie 已过期，请更新智联Cookie"
+        except Exception as e:
+            lines.append(f"⚠ {e}")
+    if lines:
+        return f"智联招聘 新增 {total} 条（{', '.join(lines)}）"
+    if all_zero:
+        return "⚠ 智联 API 无数据返回，Cookie 可能已过期，请更新智联Cookie"
+    return "智联招聘 无新增"
+
+
+def sync_liepin_applications() -> str:
+    """同步猎聘投递数据"""
+    lp, err = _import_liepin()
+    if not lp:
+        return err
+    lines = []
+    total = 0
+    all_zero = True
+    for tab, fetcher in [
+        ("已投递", lp.fetch_liepin_applied),
+        ("已查看", lp.fetch_liepin_viewed),
+        ("面试", lp.fetch_liepin_interview),
+        ("收藏", lp.fetch_liepin_collect),
+    ]:
+        try:
+            jobs = fetcher()
+            n = lp._save_to_storage(jobs)
+            total += n
+            if len(jobs) > 0:
+                all_zero = False
+            if n > 0:
+                lines.append(f"{tab} +{n}")
+        except PermissionError:
+            return "❌ 猎聘 Cookie 已过期，请更新猎聘Cookie"
+        except Exception as e:
+            lines.append(f"⚠ {e}")
+    if lines:
+        return f"猎聘 新增 {total} 条（{', '.join(lines)}）"
+    if all_zero:
+        return "⚠ 猎聘 API 无数据返回，Cookie 可能已过期（acw_tc时效很短），请更新猎聘Cookie"
+    return "猎聘 无新增"
 
 
 def sync_boss_recommends() -> str:
@@ -1332,8 +1449,8 @@ def sync_boss_recommends() -> str:
         return f"Boss每日推荐: ⚠ {e}"
 
 
-def sync_zhaopin_applications() -> str:
-    """只同步 智联招聘 投递数据"""
+def sync_zhaopin_recommends() -> str:
+    """只同步 智联招聘 推荐"""
     try:
         import zhaopin as _zp
     except ImportError:
@@ -1343,42 +1460,12 @@ def sync_zhaopin_applications() -> str:
         _zp = importlib.util.module_from_spec(spec)
         sys.modules["zhaopin"] = _zp
         spec.loader.exec_module(_zp)
-
-    lines = ["智联招聘今日投递："]
-    total = 0
-    for tab, fetcher in [
-        ("已投递", _zp.fetch_zhaopin_applied),
-        ("收藏", _zp.fetch_zhaopin_collect),
-    ]:
-        try:
-            jobs = fetcher()
-            n = _zp._save_to_storage(jobs)
-            total += n
-            lines.append(f"  {tab}: {len(jobs)}条 → 新增{n}条")
-        except Exception as e:
-            lines.append(f"  {tab}: ⚠ {e}")
-    lines.append(f"\n今日共新增 {total} 条投递记录")
-    return "\n".join(lines)
-
-
-def sync_zhaopin_recommends() -> str:
-    """只同步 智联招聘 推荐"""
     try:
-        import zhaopin as _zp2
-    except ImportError:
-        import os, sys, importlib.util
-        zp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zhaopin.py")
-        spec = importlib.util.spec_from_file_location("zhaopin", zp)
-        _zp2 = importlib.util.module_from_spec(spec)
-        sys.modules["zhaopin"] = _zp2
-        spec.loader.exec_module(_zp2)
-
-    try:
-        jobs = _zp2.fetch_zhaopin_recommend()
-        n = _zp2._save_to_storage(jobs)
-        return f"智联推荐: API返回{len(jobs)}条 → 新增{n}条"
+        jobs = _zp.fetch_zhaopin_recommend()
+        n = _zp._save_to_storage(jobs)
+        return f"智联每日推荐: {len(jobs)}条 → 新增{n}条"
     except Exception as e:
-        return f"智联推荐: ⚠ {e}"
+        return f"智联每日推荐: ⚠ {e}"
 
 
 # ---- 猎聘 ----
@@ -1397,30 +1484,6 @@ def _import_liepin():
             spec.loader.exec_module(mod)
             return mod, None
         return None, f"猎聘模块未找到: {lp}"
-
-
-def sync_liepin_applications() -> str:
-    """同步猎聘投递数据"""
-    lp, err = _import_liepin()
-    if not lp:
-        return err
-    lines = ["猎聘今日投递："]
-    total = 0
-    for tab, fetcher in [
-        ("已投递", lp.fetch_liepin_applied),
-        ("已查看", lp.fetch_liepin_viewed),
-        ("面试", lp.fetch_liepin_interview),
-        ("收藏", lp.fetch_liepin_collect),
-    ]:
-        try:
-            jobs = fetcher()
-            n = lp._save_to_storage(jobs)
-            total += n
-            lines.append(f"  {tab}: {len(jobs)}条 → 新增{n}条")
-        except Exception as e:
-            lines.append(f"  {tab}: ⚠ {e}")
-    lines.append(f"\n今日共新增 {total} 条")
-    return "\n".join(lines)
 
 
 def sync_liepin_recommends() -> str:
@@ -1562,10 +1625,10 @@ SKILL_MAP = {
     "set_boss_user_cookie": set_boss_user_cookie,
     "set_zhaopin_cookie": set_zhaopin_cookie,
     "set_liepin_cookie": set_liepin_cookie,
-    "change_user_role": change_user_role,
     "set_github_access_token": set_github_access_token,
     "switch_active_user": switch_active_user,
     "dismiss_setup_reminder": dismiss_setup_reminder,
+    "check_all_cookies": check_all_cookies,
     "generate_daily_report": generate_daily_report,
     "search_history": search_history,
     "summarize_period": summarize_period,

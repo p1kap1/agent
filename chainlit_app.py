@@ -200,48 +200,24 @@ async def start():
     except Exception:
         pass
 
-    cl.user_session.set("setup_mode", False)
-
-    # 新会话：清空对话历史
-    cl.user_session.set("chat_history", [])
-
-    # 根据用户角色显示不同欢迎语
-    try:
-        from settings import is_developer
-        dev = is_developer()
-    except Exception:
-        dev = False
-
-    if dev:
-        await cl.Message(
-            content="嗨～我是 **FlowMate**，你的专属工作伴侣 💼\n\n"
-            "我能帮你打理这些事：\n\n"
-            "📮 **求职管家**\n"
-            "「同步投递」·「同步推荐」·「投递汇总」·「导出Excel」·「图表」\n"
-            "→ Boss直聘 + 智联 + 猎聘 三平台一站式管理\n\n"
-            "📝 **日报助手**\n"
-            "「生成日报」→ 投递分析 + 学习建议 + 技能推荐\n"
-            "「项目总结」·「导入开发日志」·「搜索历史」\n"
-            "「搜索XX最新资料」→ 实时搜索引擎\n\n"
-            "🔧 **工具箱**\n"
-            "「查看配置」·「提交到GitHub」·「切换用户」·「开始设置」\n\n"
-            "拖一个文件进来，我能读你的简历、JD、聊天记录哦 📎\n\n"
-            "今天想从哪儿开始？😊"
-        ).send()
-    else:
-        await cl.Message(
-            content="嗨～我是 **FlowMate**，你的求职伴侣 💼\n\n"
-            "我能帮你打理这些事：\n\n"
-            "📮 **求职管家**\n"
-            "「同步投递」·「同步推荐」·「投递汇总」·「导出Excel」\n"
-            "→ Boss直聘 + 智联 + 猎聘 三平台一站式管理\n\n"
-            "📝 **日报助手**\n"
-            "「生成日报」→ 投递分析 + 学习建议 + 技能推荐\n"
-            "「搜索XX最新资料」→ 实时搜索引擎\n\n"
-            "🔧 「查看配置」·「帮助」·「开始设置」\n\n"
-            "拖一个文件进来，我能读你的简历和 JD 哦 📎\n\n"
-            "今天想从哪儿开始？😊"
-        ).send()
+    await cl.Message(
+        content="嗨～我是 **FlowMate**，你的专属工作伴侣 💼\n\n"
+        "我能帮你打理这些事：\n\n"
+        "📮 **求职管家**\n"
+        "「同步投递」·「同步推荐」·「投递汇总」·「投递表」\n"
+        "「导出Excel」·「图表」·「投递趋势」·「平台对比」\n"
+        "→ Boss直聘 + 智联 + 猎聘 三平台一站式管理\n\n"
+        "📝 **日报助手**\n"
+        "「生成日报」→ 投递分析 + 技能推荐 + 学习建议\n"
+        "「项目总结」·「导入开发日志」·「搜索历史」\n"
+        "「搜索XX最新资料」→ 实时搜索引擎\n\n"
+        "📁 **文件分析**\n"
+        "拖 md/pdf/txt/json/log/py 到对话框 → 自动解析纳入日报\n\n"
+        "🔧 **工具箱**\n"
+        "「查看配置」·「提交到GitHub」·「刷新猎聘」·「开始设置」\n"
+        "「帮助」→ 随时查看功能列表\n\n"
+        "今天想从哪儿开始？😊"
+    ).send()
 
 
 @cl.on_chat_resume
@@ -272,35 +248,22 @@ async def on_message(message: cl.Message):
 
     # 功能介绍 / 帮助：直接回复，不需 AI
     if any(w in msg for w in ["你能做什么", "功能介绍", "有什么功能", "怎么用", "帮助", "help", "使用指南", "全部功能"]):
-        try:
-            from settings import is_developer
-            dev = is_developer()
-        except Exception:
-            dev = False
-
-        base = (
-            "💼 **FlowMate 能帮你做这些**：\n\n"
+        await cl.Message(
+            content="💼 **FlowMate 能帮你做这些**：\n\n"
             "📮 **求职管家**\n"
             "「同步投递」Boss+智联+猎聘 ·「同步推荐」·「投递汇总」\n"
             "「导出Excel」·「投递表」·「每日推荐表」·「图表」\n\n"
             "📝 **日报助手**\n"
             "「生成日报」投递分析+学习建议+技能推荐\n"
-            "「搜索XX最新资料」（实时搜索引擎）\n"
-        )
-        if dev:
-            base += (
-                "「项目总结」·「导入开发日志」（开发者功能）\n\n"
-                "📁 **文件上传**\n"
-                "拖 md/pdf/txt/json/log 到对话框 → 自动分析\n\n"
-                "🔧 **工具箱**\n"
-                "「查看配置」·「提交到GitHub」·「切换用户」·「刷新猎聘」\n\n"
-            )
-        base += (
+            "「项目总结」·「搜索XX最新资料」（实时搜索引擎）\n\n"
+            "📁 **文件上传**\n"
+            "拖 md/pdf/txt/json/log 到对话框 → 自动分析\n\n"
+            "🔧 **工具箱**\n"
+            "「查看配置」·「提交到GitHub」·「切换用户」·「刷新猎聘」\n\n"
             "📊 **多平台**\n"
             "Boss直聘 · 智联招聘 · 猎聘 | 支持 DeepSeek/OpenAI/智谱\n\n"
             "今天想从哪儿开始？😊"
-        )
-        await cl.Message(content=base).send()
+        ).send()
         return
 
     # 配置模式：本地处理设置命令，不经过 AI
@@ -418,10 +381,12 @@ def _handle_setup_command(msg: str) -> str | None:
     import re
     from settings import (
         select_model, set_api_key, set_model_name, set_api_base_url,
-        set_boss_cookie, set_github_token, switch_user, dismiss_setup,
+        set_boss_cookie, set_zhaopin_cookie, set_liepin_cookie,
+        set_github_token, switch_user, dismiss_setup,
         MODEL_PRESETS,
     )
     msg_lower = msg.lower()
+    msg_stripped = msg.strip()
 
     # 跳过
     if any(w in msg_lower for w in ["跳过", "不需要", "不用", "暂不", "skip"]):
@@ -437,8 +402,6 @@ def _handle_setup_command(msg: str) -> str | None:
 
     # API Key
     if "设置key" in msg_lower or "设置 key" in msg_lower or "apikey" in msg_lower or "api key" in msg_lower:
-        # 提取 key: 设置Key为sk-xxx 或 设置key为 sk-xxx
-        import re
         m = re.search(r'(?:sk-|SK-)\S+', msg)
         if m:
             return set_api_key(m.group(0))
@@ -457,10 +420,64 @@ def _handle_setup_command(msg: str) -> str | None:
         parts = msg.replace("：", ":").split("为", 1)
         return set_api_base_url(parts[1].strip()) if len(parts) > 1 else "请用「设置API地址为https://xxx」格式"
 
-    # Boss Cookie
-    if "cookie" in msg_lower and "boss" in msg_lower:
-        parts = msg.replace("：", ":").split(":", 1)
-        return set_boss_cookie(parts[1].strip()) if len(parts) > 1 else "请提供完整 Cookie 字符串"
+    # ---- Cookie 处理（三平台）----
+
+    # 1. Boss直聘 Cookie
+    if ("boss" in msg_lower or "直聘" in msg) and ("cookie" in msg_lower or "更新" in msg):
+        # 尝试提取 Cookie：用户可能直接粘贴在「更新Boss Cookie」后面
+        parts = msg.split("更新Boss Cookie", 1) if "更新Boss Cookie" in msg else msg.split("为", 1)
+        if len(parts) > 1 and len(parts[1].strip()) > 20:
+            return set_boss_cookie(parts[1].strip())
+        return (
+            "请提供 Boss直聘 的 Cookie 内容。获取方法：\n"
+            "1. 打开 zhipin.com 并登录\n"
+            "2. F12 → Application → Cookies → 选 zhipin.com\n"
+            "3. 在 Cookie 区域 Ctrl+A 全选 → Ctrl+C 复制\n"
+            "4. 回到这里粘贴发给我"
+        )
+
+    # 2. 智联招聘 Cookie
+    if ("智联" in msg or "zhaopin" in msg_lower) and ("cookie" in msg_lower or "更新" in msg):
+        parts = msg.split("更新智联Cookie", 1) if "更新智联Cookie" in msg else msg.split("为", 1)
+        if len(parts) > 1 and len(parts[1].strip()) > 20:
+            return set_zhaopin_cookie(parts[1].strip())
+        return (
+            "请提供 智联招聘 的 Cookie 内容。获取方法：\n"
+            "1. 打开 zhaopin.com 并登录\n"
+            "2. F12 → Application → Cookies → 选 zhaopin.com\n"
+            "3. 在 Cookie 区域 Ctrl+A 全选 → Ctrl+C 复制\n"
+            "4. 回到这里粘贴发给我（支持浏览器导出的 JSON 格式）"
+        )
+
+    # 3. 猎聘 Cookie
+    if ("猎聘" in msg or "liepin" in msg_lower) and ("cookie" in msg_lower or "更新" in msg):
+        parts = msg.split("更新猎聘Cookie", 1) if "更新猎聘Cookie" in msg else msg.split("为", 1)
+        if len(parts) > 1 and len(parts[1].strip()) > 20:
+            return set_liepin_cookie(parts[1].strip())
+        return (
+            "请提供 猎聘 的 Cookie 内容。获取方法：\n"
+            "1. 打开 c.liepin.com 并登录\n"
+            "2. F12 → Application → Cookies → 全选复制\n"
+            "3. 回到这里粘贴发给我（可直接粘贴浏览器导出的 JSON 数组）\n"
+            "⚠️ 猎聘 Cookie 有效期很短，建议操作时临时获取。"
+        )
+
+    # 4. 自动检测：用户直接粘贴了 Cookie（内容超长且包含 Cookie 特征）
+    if len(msg_stripped) > 100 and ("=" in msg_stripped or msg_stripped.startswith("[") or msg_stripped.startswith("{")):
+        if "zp_at" in msg_stripped or "wt2" in msg_stripped or "zhipin" in msg_lower:
+            return set_boss_cookie(msg_stripped)
+        if "at=" in msg_stripped or "rt=" in msg_stripped or "zhaopin" in msg_lower or "zp_" in msg_stripped:
+            return set_zhaopin_cookie(msg_stripped)
+        if "XSRF-TOKEN" in msg_stripped or "lt_auth" in msg_stripped or "liepin" in msg_lower or "acw_tc" in msg_stripped:
+            return set_liepin_cookie(msg_stripped)
+        # 无法自动识别，提示用户
+        return (
+            "检测到 Cookie 内容，但无法自动识别平台。请告诉我这是哪个平台的：\n"
+            "- 「更新Boss Cookie」\n"
+            "- 「更新智联Cookie」\n"
+            "- 「更新猎聘Cookie」\n\n"
+            "然后把 Cookie 粘贴在后面。"
+        )
 
     # GitHub Token
     if "token" in msg_lower or "github" in msg_lower:
